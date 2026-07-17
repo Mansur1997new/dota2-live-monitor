@@ -6,10 +6,10 @@ import os
 from flask import Flask
 import threading
 
-# ===== КОНФИГУРАЦИЯ =====
-TELEGRAM_TOKEN = "8935730289:AAH4GTLiauVomwDL2z3Gttv7uMP2VFV_pOc"
-STRATZ_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJTdWJqZWN0IjoiZGE0OTliZWEtOWQ5Ni00ZWEwLWIzMWMtMmM3NWZhYjQ0ZTU2IiwiU3RlYW1JZCI6IjI3NTg1NTEwOCIsIkFQSVVzZXIiOiJ0cnVlIiwibmJmIjoxNzg0MTI0MTY2LCJleHAiOjE4MTU2NjAxNjYsImlhdCI6MTc4NDEyNDE2NiwiaXNzIjoiaHR0cHM6Ly9hcGkuc3RyYXR6LmNvbSJ9.dZbLNJbyieKxx18LGQnodjVIk6OjDFVQZjcJualxJVo"
-CHAT_ID = "583922132"
+# ===== КОНФИГУРАЦИЯ (ЗАМЕНИТЕ ЭТИ ТРИ СТРОЧКИ) =====
+TELEGRAM_TOKEN = "8935730289:AAH4GTLiauVomwDL2z3Gttv7uMP2VFV_pOc"  # ← Сюда токен нового бота от @BotFather
+STRATZ_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJTdWJqZWN0IjoiZGE0OTliZWEtOWQ5Ni00ZWEwLWIzMWMtMmM3NWZhYjQ0ZTU2IiwiU3RlYW1JZCI6IjI3NTg1NTEwOCIsIkFQSVVzZXIiOiJ0cnVlIiwibmJmIjoxNzg0MTI0MTY2LCJleHAiOjE4MTU2NjAxNjYsImlhdCI6MTc4NDEyNDE2NiwiaXNzIjoiaHR0cHM6Ly9hcGkuc3RyYXR6LmNvbSJ9.dZbLNJbyieKxx18LGQnodjVIk6OjDFVQZjcJualxJVo"                # ← Сюда ваш токен от STRATZ
+CHAT_ID = "583922132"                    # ← Сюда ваш Chat ID (узнать у @userinfobot)
 
 # ===== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ =====
 tracked_matches = {}
@@ -181,16 +181,20 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Бот для Dota 2 live-матчей работает!"
+    return "✅ Бот для Dota 2 live-матчей работает! Можете закрыть эту страницу."
 
 def run_monitor():
     asyncio.run(monitor_loop())
 
 if __name__ == "__main__":
-    # Запускаем мониторинг в отдельном потоке
-    thread = threading.Thread(target=run_monitor)
-    thread.daemon = True
-    thread.start()
+    print("🚀 Запуск бота для мониторинга live-матчей Dota 2...")
     
-    # Запускаем веб-сервер
-    app.run(host='0.0.0.0', port=10000)
+    # Запускаем мониторинг в отдельном потоке
+    monitor_thread = threading.Thread(target=run_monitor)
+    monitor_thread.daemon = True
+    monitor_thread.start()
+    
+    # Запускаем веб-сервер на порту, который ожидает Render
+    port = int(os.environ.get('PORT', 10000))
+    print(f"🌐 Веб-сервер Flask запускается на порту {port}")
+    app.run(host='0.0.0.0', port=port)
