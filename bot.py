@@ -1,14 +1,15 @@
 import asyncio
-import time
 import requests
 from datetime import datetime
 from telegram import Bot
 import os
+from flask import Flask
+import threading
 
-# ===== КОНФИГУРАЦИЯ (ЗАМЕНИТЕ ЭТИ ТРИ СТРОЧКИ) =====
-TELEGRAM_TOKEN = "8935730289:AAH4GTLiauVomwDL2z3Gttv7uMP2VFV_pOc"  # ← Сюда токен нового бота от @BotFather
-STRATZ_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJTdWJqZWN0IjoiZGE0OTliZWEtOWQ5Ni00ZWEwLWIzMWMtMmM3NWZhYjQ0ZTU2IiwiU3RlYW1JZCI6IjI3NTg1NTEwOCIsIkFQSVVzZXIiOiJ0cnVlIiwibmJmIjoxNzg0MTI0MTY2LCJleHAiOjE4MTU2NjAxNjYsImlhdCI6MTc4NDEyNDE2NiwiaXNzIjoiaHR0cHM6Ly9hcGkuc3RyYXR6LmNvbSJ9.dZbLNJbyieKxx18LGQnodjVIk6OjDFVQZjcJualxJVo"                # ← Сюда ваш токен от STRATZ
-CHAT_ID = "583922132"                    # ← Сюда ваш Chat ID (узнать у @userinfobot)
+# ===== КОНФИГУРАЦИЯ =====
+TELEGRAM_TOKEN = "8935730289:AAH4GTLiauVomwDL2z3Gttv7uMP2VFV_pOc"
+STRATZ_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJTdWJqZWN0IjoiZGE0OTliZWEtOWQ5Ni00ZWEwLWIzMWMtMmM3NWZhYjQ0ZTU2IiwiU3RlYW1JZCI6IjI3NTg1NTEwOCIsIkFQSVVzZXIiOiJ0cnVlIiwibmJmIjoxNzg0MTI0MTY2LCJleHAiOjE4MTU2NjAxNjYsImlhdCI6MTc4NDEyNDE2NiwiaXNzIjoiaHR0cHM6Ly9hcGkuc3RyYXR6LmNvbSJ9.dZbLNJbyieKxx18LGQnodjVIk6OjDFVQZjcJualxJVo"
+CHAT_ID = "583922132"
 
 # ===== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ =====
 tracked_matches = {}
@@ -175,6 +176,21 @@ async def monitor_loop():
             print(f"[{datetime.now()}] Ошибка: {e}")
             await asyncio.sleep(60)
 
-if __name__ == "__main__":
-    print("🤖 Бот для мониторинга live-матчей запущен!")
+# ===== ЗАГЛУШКА ДЛЯ WEB SERVICE =====
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Бот для Dota 2 live-матчей работает!"
+
+def run_monitor():
     asyncio.run(monitor_loop())
+
+if __name__ == "__main__":
+    # Запускаем мониторинг в отдельном потоке
+    thread = threading.Thread(target=run_monitor)
+    thread.daemon = True
+    thread.start()
+    
+    # Запускаем веб-сервер
+    app.run(host='0.0.0.0', port=10000)
