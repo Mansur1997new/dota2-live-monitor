@@ -8,15 +8,14 @@ import logging
 # ===== НАСТРОЙКА ЛОГИРОВАНИЯ =====
 logging.basicConfig(level=logging.INFO)
 
-# ===== КОНФИГУРАЦИЯ (токены берутся из переменных окружения) =====
+# ===== КОНФИГУРАЦИЯ (токены вставлены напрямую) =====
 TELEGRAM_TOKEN = "8935730289:AAH4GTLiauVomwDL2z3Gttv7uMP2VFV_pOc"
 STRATZ_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJTdWJqZWN0IjoiZGE0OTliZWEtOWQ5Ni00ZWEwLWIzMWMtMmM3NWZhYjQ0ZTU2IiwiU3RlYW1JZCI6IjI3NTg1NTEwOCIsIkFQSVVzZXIiOiJ0cnVlIiwibmJmIjoxNzg0MTI0MTY2LCJleHAiOjE4MTU2NjAxNjYsImlhdCI6MTc4NDEyNDE2NiwiaXNzIjoiaHR0cHM6Ly9hcGkuc3RyYXR6LmNvbSJ9.dZbLNJbyieKxx18LGQnodjVIk6OjDFVQZjcJualxJVo"
-CHAT_ID = "583922132" 
+CHAT_ID = "583922132"
 
 # ===== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ =====
-tracked_matches = {}
+tracked_matches = {}  # {match_id: {"start_time": datetime, "notified": False}}
 
-# ===== ЗАПРОС К STRATZ API =====
 def get_live_matches():
     url = "https://api.stratz.com/graphql"
     query = """
@@ -34,9 +33,12 @@ def get_live_matches():
     }
     """
     headers = {"Authorization": f"Bearer {STRATZ_TOKEN}"}
-    response = requests.post(url, headers=headers, json={"query": query})
-    if response.status_code == 200:
-        return response.json().get("data", {}).get("liveMatches", [])
+    try:
+        response = requests.post(url, headers=headers, json={"query": query}, timeout=10)
+        if response.status_code == 200:
+            return response.json().get("data", {}).get("liveMatches", [])
+    except Exception as e:
+        logging.error(f"Ошибка при получении списка матчей: {e}")
     return []
 
 def get_match_details(match_id):
@@ -68,9 +70,12 @@ def get_match_details(match_id):
     """
     headers = {"Authorization": f"Bearer {STRATZ_TOKEN}"}
     payload = {"query": query, "variables": {"match_id": int(match_id)}}
-    response = requests.post(url, headers=headers, json=payload)
-    if response.status_code == 200:
-        return response.json().get("data", {}).get("match")
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=10)
+        if response.status_code == 200:
+            return response.json().get("data", {}).get("match")
+    except Exception as e:
+        logging.error(f"Ошибка при получении деталей матча {match_id}: {e}")
     return None
 
 def get_team_name(team_id):
@@ -146,23 +151,35 @@ async def monitor_loop():
     
     while True:
         try:
-            logging.info(f"Проверка live-матчей...")
+            logging.info("Проверка live-матчей...")
             live_matches = get_live_matches()
             
             for match in live_matches:
                 match_id = match["matchId"]
-                started_at = match.get("startedAt")
                 
-                if not started_at:
-                    logging.warning(f"Матч {match_id} не имеет startedAt")
+                # Определяем время начала матча
+                started_at = match.get("startedAt")
+                if started_at:
+                    start_time = datetime.fromtimestamp(started_at)
+                elif match_id in tracked_matches:
+                    # Если startedAt нет, но матч уже отслеживается — используем сохранённое время
+                    start_time = tracked_matches[match_id]["start_time"]
+                else:
+                    # Если startedAt нет и матч новый — запоминаем текущее время как время начала
+                    logging.warning(f"Матч {match_id} не имеет startedAt, используем время обнаружения")
+                    start_time = datetime.now()
+                    tracked_matches[match_id] = {"start_time": start_time, "notified": False}
                     continue
                 
-                start_time = datetime.fromtimestamp(started_at)
                 elapsed = (datetime.now() - start_time).total_seconds() / 60
                 logging.info(f"Матч {match_id}: прошло {elapsed:.1f} минут")
                 
-                if 14 <= elapsed <= 16 and match_id not in tracked_matches:
-                    tracked_matches[match_id] = {"notified": False}
+                # Если матч новый — добавляем в отслеживание
+                if match_id not in tracked_matches:
+                    tracked_matches[match_id] = {"start_time": start_time, "notified": False}
+                
+                # Проверяем, не пора ли отправить уведомление
+                if 14 <= elapsed <= 16 and not tracked_matches[match_id]["notified"]:
                     match_data = get_match_details(match_id)
                     if match_data:
                         metrics = calculate_metrics(match_data)
@@ -170,8 +187,12 @@ async def monitor_loop():
                         tracked_matches[match_id]["notified"] = True
                         logging.info(f"Уведомление отправлено для матча {match_id}")
             
+            # Очищаем завершённые матчи (которым больше 20 минут)
             for mid in list(tracked_matches.keys()):
                 if tracked_matches[mid]["notified"]:
+                    del tracked_matches[mid]
+                elif (datetime.now() - tracked_matches[mid]["start_time"]).total_seconds() / 60 > 20:
+                    logging.info(f"Матч {mid} удалён из отслеживания (прошло >20 минут)")
                     del tracked_matches[mid]
             
             await asyncio.sleep(30)
