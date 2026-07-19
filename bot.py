@@ -3,13 +3,15 @@ import requests
 from datetime import datetime
 from telegram import Bot
 import os
-from flask import Flask
-import threading
+import logging
 
-# ===== КОНФИГУРАЦИЯ (ЗАМЕНИТЕ ЭТИ ТРИ СТРОЧКИ) =====
-TELEGRAM_TOKEN = "8935730289:AAH4GTLiauVomwDL2z3Gttv7uMP2VFV_pOc"  # ← Сюда токен нового бота от @BotFather
-STRATZ_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJTdWJqZWN0IjoiZGE0OTliZWEtOWQ5Ni00ZWEwLWIzMWMtMmM3NWZhYjQ0ZTU2IiwiU3RlYW1JZCI6IjI3NTg1NTEwOCIsIkFQSVVzZXIiOiJ0cnVlIiwibmJmIjoxNzg0MTI0MTY2LCJleHAiOjE4MTU2NjAxNjYsImlhdCI6MTc4NDEyNDE2NiwiaXNzIjoiaHR0cHM6Ly9hcGkuc3RyYXR6LmNvbSJ9.dZbLNJbyieKxx18LGQnodjVIk6OjDFVQZjcJualxJVo"                # ← Сюда ваш токен от STRATZ
-CHAT_ID = "583922132"                    # ← Сюда ваш Chat ID (узнать у @userinfobot)
+# ===== НАСТРОЙКА ЛОГИРОВАНИЯ =====
+logging.basicConfig(level=logging.INFO)
+
+# ===== КОНФИГУРАЦИЯ (токены берутся из переменных окружения) =====
+TELEGRAM_TOKEN = os.getenv("8935730289:AAH4GTLiauVomwDL2z3Gttv7uMP2VFV_pOc")
+STRATZ_TOKEN = os.getenv("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJTdWJqZWN0IjoiZGE0OTliZWEtOWQ5Ni00ZWEwLWIzMWMtMmM3NWZhYjQ0ZTU2IiwiU3RlYW1JZCI6IjI3NTg1NTEwOCIsIkFQSVVzZXIiOiJ0cnVlIiwibmJmIjoxNzg0MTI0MTY2LCJleHAiOjE4MTU2NjAxNjYsImlhdCI6MTc4NDEyNDE2NiwiaXNzIjoiaHR0cHM6Ly9hcGkuc3RyYXR6LmNvbSJ9.dZbLNJbyieKxx18LGQnodjVIk6OjDFVQZjcJualxJVo")
+CHAT_ID = os.getenv("583922132")
 
 # ===== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ =====
 tracked_matches = {}
@@ -144,7 +146,7 @@ async def monitor_loop():
     
     while True:
         try:
-            print(f"[{datetime.now()}] Проверка live-матчей...")
+            logging.info(f"Проверка live-матчей...")
             live_matches = get_live_matches()
             
             for match in live_matches:
@@ -152,10 +154,12 @@ async def monitor_loop():
                 started_at = match.get("startedAt")
                 
                 if not started_at:
+                    logging.warning(f"Матч {match_id} не имеет startedAt")
                     continue
                 
                 start_time = datetime.fromtimestamp(started_at)
                 elapsed = (datetime.now() - start_time).total_seconds() / 60
+                logging.info(f"Матч {match_id}: прошло {elapsed:.1f} минут")
                 
                 if 14 <= elapsed <= 16 and match_id not in tracked_matches:
                     tracked_matches[match_id] = {"notified": False}
@@ -164,7 +168,7 @@ async def monitor_loop():
                         metrics = calculate_metrics(match_data)
                         await send_notification(bot, match_id, match, metrics)
                         tracked_matches[match_id]["notified"] = True
-                        print(f"[{datetime.now()}] Уведомление отправлено для матча {match_id}")
+                        logging.info(f"Уведомление отправлено для матча {match_id}")
             
             for mid in list(tracked_matches.keys()):
                 if tracked_matches[mid]["notified"]:
@@ -173,28 +177,9 @@ async def monitor_loop():
             await asyncio.sleep(30)
             
         except Exception as e:
-            print(f"[{datetime.now()}] Ошибка: {e}")
+            logging.error(f"Ошибка в monitor_loop: {e}")
             await asyncio.sleep(60)
 
-# ===== ЗАГЛУШКА ДЛЯ WEB SERVICE =====
-app = Flask(__name__)
-
-@app.route('/')
-def home():
-    return "✅ Бот для Dota 2 live-матчей работает! Можете закрыть эту страницу."
-
-def run_monitor():
-    asyncio.run(monitor_loop())
-
 if __name__ == "__main__":
-    print("🚀 Запуск бота для мониторинга live-матчей Dota 2...")
-    
-    # Запускаем мониторинг в отдельном потоке
-    monitor_thread = threading.Thread(target=run_monitor)
-    monitor_thread.daemon = True
-    monitor_thread.start()
-    
-    # Запускаем веб-сервер на порту, который ожидает Render
-    port = int(os.environ.get('PORT', 10000))
-    print(f"🌐 Веб-сервер Flask запускается на порту {port}")
-    app.run(host='0.0.0.0', port=port)
+    logging.info("🚀 Запуск бота для мониторинга live-матчей Dota 2...")
+    asyncio.run(monitor_loop())
